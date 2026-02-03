@@ -1,1 +1,1 @@
-![v0.1gif](.images/v0.1.gif)
+![v0.1gif](./v0.1.gif)
