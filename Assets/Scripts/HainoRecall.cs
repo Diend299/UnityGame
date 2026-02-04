@@ -24,6 +24,16 @@ public class HainoRecall : MonoBehaviour
     [Header("UI 引用")]
     [SerializeField] private Image recallCooldownImage;      // 技能冷却圆形冷却条（放在血量滑块下方，只用 Background 图像）
 
+    [Header("视觉效果")]
+    [SerializeField] private ParticleSystem recallEffectPrefab;  // 回溯粒子特效预制体
+    [SerializeField] private float effectDuration = 0.5f;        // 特效持续时间
+    [SerializeField] private Color effectColor = Color.white;    // 特效颜色
+
+    [Header("时停效果")]
+    [SerializeField] private float timeStopDuration = 0.5f;      // 时停持续时间
+    [SerializeField] private float timeScale = 0.05f;            // 时停时的时间缩放
+    [SerializeField] private LayerMask affectedLayers;           // 受时停影响的图层
+
     private readonly List<Snapshot> _history = new List<Snapshot>();
     private PlayerHealth _playerHealth;
     private bool _isRecalling;
@@ -33,6 +43,10 @@ public class HainoRecall : MonoBehaviour
 
     private Snapshot _startSnapshot;   // 回溯开始时的状态
     private Snapshot _targetSnapshot;  // 要回溯到的目标状态（3 秒前）
+    private ParticleSystem _currentEffect;  // 当前播放的特效实例
+    private float _timeStopTimer;      // 时停计时器
+    private bool _isTimeStopped;       // 是否处于时停状态
+    private float _originalTimeScale;  // 原始时间缩放
 
     private void Awake()
     {
@@ -148,6 +162,94 @@ public class HainoRecall : MonoBehaviour
 
         // 开始回溯时进入冷却（10s）
         _cooldownRemaining = cooldownDuration;
+
+        // 启动时停效果
+        StartTimeStop();
+
+        // 播放回溯特效
+        PlayRecallEffect();
+    }
+
+    private void StartTimeStop()
+    {
+        // 保存原始时间缩放
+        _originalTimeScale = Time.timeScale;
+        
+        // 应用时停
+        Time.timeScale = timeScale;
+        _timeStopTimer = timeStopDuration;
+        _isTimeStopped = true;
+
+        // 冻结受影响图层的物体
+        FreezeAffectedObjects(true);
+    }
+
+    private void StopTimeStop()
+    {
+        // 恢复时间
+        Time.timeScale = _originalTimeScale;
+        _isTimeStopped = false;
+
+        // 解冻物体
+        FreezeAffectedObjects(false);
+    }
+
+    private void FreezeAffectedObjects(bool freeze)
+    {
+        // 获取场景中所有受时停影响的物体
+        Collider2D[] affectedColliders = Physics2D.OverlapCircleAll(transform.position, 100f, affectedLayers);
+        
+        foreach (var collider in affectedColliders)
+        {
+            Rigidbody2D rb = collider.GetComponent<Rigidbody2D>();
+            if (rb != null)
+            {
+                if (freeze)
+                {
+                    // 保存当前速度用于恢复
+                    rb.velocity = Vector2.zero;
+                    rb.angularVelocity = 0f;
+                    rb.isKinematic = true;
+                }
+                else
+                {
+                    rb.isKinematic = false;
+                }
+            }
+        }
+    }
+
+    private void PlayRecallEffect()
+    {
+        if (recallEffectPrefab == null) return;
+
+        // 如果已有特效，先停止
+        if (_currentEffect != null)
+        {
+            _currentEffect.Stop();
+            _currentEffect = null;
+        }
+
+        // 实例化特效
+        var effectObj = Instantiate(recallEffectPrefab, transform.position, Quaternion.identity);
+        _currentEffect = effectObj.GetComponent<ParticleSystem>();
+
+        if (_currentEffect != null)
+        {
+            // 设置特效颜色
+            var main = _currentEffect.main;
+            main.startColor = effectColor;
+
+            // 设置持续时间
+            main.duration = effectDuration;
+
+            // 设置为世界空间
+            var shape = _currentEffect.shape;
+            shape.scale = Vector3.one;
+
+            // 设置粒子系统在播放完毕后自动销毁
+            Destroy(effectObj, effectDuration + 0.5f);
+        }
     }
 
     private void UpdateRecall(float now)
@@ -174,6 +276,16 @@ public class HainoRecall : MonoBehaviour
         if (_playerHealth.healthSlider != null)
         {
             _playerHealth.healthSlider.value = _playerHealth.currentHealth;
+        }
+
+        // 更新时停计时器
+        if (_isTimeStopped)
+        {
+            _timeStopTimer -= Time.unscaledDeltaTime;
+            if (_timeStopTimer <= 0f)
+            {
+                StopTimeStop();
+            }
         }
 
         if (t >= 1f)
