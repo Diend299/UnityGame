@@ -67,7 +67,7 @@ public class TurretController : MonoBehaviour
         GameObject turret = Instantiate(turretPrefab, spawnPosition, Quaternion.identity);
         
         // 设置炮台的朝向
-        turret.transform.localScale = new Vector3(transform.localScale.x, 1, 1);
+        //turret.transform.localScale = new Vector3(transform.localScale.x, 1, 1);
 
         // 进入冷却
         _cooldownRemaining = cooldownDuration;
